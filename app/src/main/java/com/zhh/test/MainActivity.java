@@ -6,12 +6,7 @@ import android.view.View;
 
 import com.zhh.test.update.UpdateVersionController;
 
-/**
- * Created by zhh on 2017/1/18.
- * 个人
- * csdn网站：http://blog.csdn.net/zhh_csdn_ard
- * devstore网站：http://www.devstore.cn/user_home/zhanghai_ardapp.html
- */
+
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
 
     private UpdateVersionController controller = null;

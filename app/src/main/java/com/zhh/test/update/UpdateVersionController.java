@@ -10,6 +10,8 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
@@ -17,22 +19,26 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
-
+import com.google.gson.Gson;
+import com.zhh.test.Bean.BanBeanData;
 import com.zhh.test.R;
 
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.Response;
 
 
 public class UpdateVersionController {
 
     private Context context;
-    //更新文件的实例
-    private AppUpdateInfo info;
     //当前版本号
     private int versionCode;
     //提示用户更新的dialog
@@ -41,6 +47,9 @@ public class UpdateVersionController {
     private ProgressDialog pd;
 
     private Button cancelBtn;
+    private int endCode;
+    private String upDateDesc;
+    private String downloadUrl;
 
     public static UpdateVersionController getInstance(Context context) {
         return new UpdateVersionController(context);
@@ -80,26 +89,46 @@ public class UpdateVersionController {
      */
     private void checkVersionTask() {
         /**网络加载获取app新版版本信息      这里不做请求直接赋值*/
-        //得到新版本的信息Bean对象
-        info = new AppUpdateInfo();
-        //文件下载的位置
-        info.setUrl("http://openbox.mobilem.360.cn/index/d/sid/3429345");
-        //得到新的版本号
-        info.setVercode(2);//每次更新都靠它
-        //新的版本名字
-        info.setVername("2.0");
-        //info.setApkname("com.hellotext.1309171635.apk");//apk的名字
-        info.setAppname("Hello");
-        //是否强制更新的标志
-        info.setForceUpp("no");
-        //提示用户更新了什么
-        info.setUppcontent("1. Hello啊哟更新了\n2. 英文的,界面很好看.\n3. 界面效果优化");//更新内容
-        //对比版本号信息
-        updateApp();
+        Call call = new Utils().okUitls();
+        call.enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                String string = response.body().string();
+                Log.d("zzz", string);
+                Gson gson = new Gson();
+                BanBeanData banBeanData = gson.fromJson(string, BanBeanData.class);
+                BanBeanData.DataBean data = banBeanData.getData();
+                downloadUrl = data.getDownloadUrl();
+                String timestamp = data.getTimestamp();
+                String upDate = data.getUpDate();
+                upDateDesc = data.getUpDateDesc();
+                String versionCode = data.getVersionCode();
+                endCode = Integer.valueOf(versionCode).intValue();
+                Log.d("zzz", endCode+"");
+                String versionName = data.getVersionName();
+                Log.d("zzz", downloadUrl + timestamp + upDate + upDateDesc + versionCode + versionName);
+                //回到叫起打车的页面
+                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                    @Override
+                    public void run() {
+                        //对比版本号信息
+                        updateApp();
+                    }
+                });
+
+            }
+        });
     }
     private void updateApp() {
+        boolean b = endCode > versionCode;
+        Log.d("zzz", b+"");
         //判断版本号
-        if (null != info && info.getVercode() > versionCode) {//20>19可更新
+        if (0!= endCode && endCode > versionCode) {//20>19可更新
             //更新的方法
             showUpdataDialog();
         } else {
@@ -121,7 +150,7 @@ public class UpdateVersionController {
         dialog.setCanceledOnTouchOutside(false);
         dialog.setCancelable(false);
         //附上提示信息
-        ((TextView) dialog.findViewById(R.id.content)).setText(info.getUppcontent());
+        ((TextView) dialog.findViewById(R.id.content)).setText(upDateDesc);
         cancelBtn = (Button) dialog.findViewById(R.id.cancel);
         // 取消更新
         cancelBtn.setOnClickListener(new View.OnClickListener() {
@@ -187,15 +216,17 @@ public class UpdateVersionController {
                 public void run() {
                     try {
                         // 在子线程中下载APK文件（调起下载apk的方法）
-                        File file = getFileFromServer(info.getUrl(), pd);
+                        File file = getFileFromServer(downloadUrl, pd);
+                        //File file = getFileFromServer("http://118.190.91.24/sc/Uploads/Download/2017-09-11/59b64844f3c0b.apk", pd);
                         sleep(1000);
                         // 安装APK文件
                         installApk(file);
                         // 结束掉进度条对话框
                         pd.dismiss();
                     } catch (Exception e) {
+
                         //Toast.makeText(context, "文件下载失败了~", Toast.LENGTH_SHORT).show();
-                        Log.d("zzz", "下载失败");
+                        Log.d("zzz", "下载失败"+e);
                         pd.dismiss();
                         e.printStackTrace();
                     }
@@ -213,10 +244,10 @@ public class UpdateVersionController {
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setConnectTimeout(5000);
             // 获取到文件的大小
-            pd.setMax(conn.getContentLength() / 1024/1024);
+            pd.setMax(conn.getContentLength() / 1024);
             InputStream is = conn.getInputStream();
 
-            File file = new File(Environment.getExternalStorageDirectory().getPath() +"/blibao/merchant","i_blibao_shop.apk");
+            File file = new File(Environment.getExternalStorageDirectory().getPath(),"app-release.apk");
             //判断文件夹是否被创建
             if (!file.getParentFile().exists()) {
                 file.getParentFile().mkdirs();
@@ -241,6 +272,7 @@ public class UpdateVersionController {
             return null;
         }
     }
+
     //安装apk方法
     protected void installApk(File file) {
         Intent intent = new Intent();
@@ -251,8 +283,5 @@ public class UpdateVersionController {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         context.startActivity(intent);
     }
-
-
-
 
 }
